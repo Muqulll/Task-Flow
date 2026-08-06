@@ -1,0 +1,17 @@
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+venv/
+env/
+.venv/
+
+# Django local database & secret keys
+db.sqlite3
+.env
+
+# IDE / Editor settings
+.vscode/
+.idea/

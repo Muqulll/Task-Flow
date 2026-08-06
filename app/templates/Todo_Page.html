@@ -1,0 +1,157 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - TaskFlow{% endblock %}
+
+{% block content %}
+<main class="w-full max-w-2xl bg-slate-800 p-6 md:p-8 rounded-2xl shadow-2xl border border-slate-700/50">
+  
+  <!-- Add Task Form -->
+  <form id="add-task-form" class="flex gap-2 mb-8">
+    <input 
+      type="text" 
+      id="task-input" 
+      placeholder="Add a new pending task..." 
+      required 
+      class="flex-1 px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition"
+    />
+    <button 
+      type="submit" 
+      class="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl shadow-lg shadow-blue-600/25 active:scale-95 transition"
+    >
+      Add Task
+    </button>
+  </form>
+
+  <!-- Task Sections -->
+  <div class="space-y-6">
+    <!-- Pending Tasks -->
+    <div>
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-amber-400">⏳ Pending Tasks</h2>
+        <span id="pending-count" class="px-2.5 py-0.5 text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full">0</span>
+      </div>
+      <ul id="pending-list" class="space-y-2"></ul>
+    </div>
+
+    <!-- Completed Tasks -->
+    <div>
+      <div class="flex items-center justify-between mb-3 pt-4 border-t border-slate-700/60">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-emerald-400">✔ Completed Tasks</h2>
+        <span id="completed-count" class="px-2.5 py-0.5 text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full">0</span>
+      </div>
+      <ul id="completed-list" class="space-y-2"></ul>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+
+  const pendingList = document.getElementById('pending-list');
+  const completedList = document.getElementById('completed-list');
+  const pendingCount = document.getElementById('pending-count');
+  const completedCount = document.getElementById('completed-count');
+  const addTaskForm = document.getElementById('add-task-form');
+  const taskInput = document.getElementById('task-input');
+
+  function createTaskItem(task) {
+    const li = document.createElement('li');
+    li.className = `flex items-center justify-between p-3.5 rounded-xl border transition ${
+      task.completed 
+        ? 'bg-slate-900/40 border-slate-800 text-slate-500' 
+        : 'bg-slate-900 border-slate-700/70 text-slate-100 hover:border-slate-600'
+    }`;
+
+    li.innerHTML = `
+      <div class="flex items-center gap-3">
+        <input type="checkbox" ${task.completed ? 'checked' : ''} onchange="toggleTask(${task.id})" class="w-4 h-4 accent-blue-600 rounded cursor-pointer" />
+        <span class="${task.completed ? 'line-through text-slate-500' : 'font-medium'}">${task.title}</span>
+      </div>
+      <button onclick="deleteTask(${task.id})" class="text-slate-500 hover:text-red-400 text-xs font-semibold px-2 py-1 transition">Delete</button>
+    `;
+    return li;
+  }
+
+  async function loadTasks() {
+    try {
+      const res = await fetch('/api/tasks/');
+      const data = await res.json();
+      
+      pendingList.innerHTML = '';
+      completedList.innerHTML = '';
+
+      const pendingTasks = data.tasks.filter(t => !t.completed);
+      const completedTasks = data.tasks.filter(t => t.completed);
+
+      pendingCount.innerText = pendingTasks.length;
+      completedCount.innerText = completedTasks.length;
+
+      if (pendingTasks.length === 0) {
+        pendingList.innerHTML = `<li class="text-slate-500 text-sm italic p-3 text-center bg-slate-900/30 rounded-xl border border-dashed border-slate-800">No pending tasks. 🎉</li>`;
+      } else {
+        pendingTasks.forEach(task => pendingList.appendChild(createTaskItem(task)));
+      }
+
+      if (completedTasks.length === 0) {
+        completedList.innerHTML = `<li class="text-slate-500 text-sm italic p-3 text-center bg-slate-900/30 rounded-xl border border-dashed border-slate-800">No completed tasks yet.</li>`;
+      } else {
+        completedTasks.forEach(task => completedList.appendChild(createTaskItem(task)));
+      }
+    } catch (err) {
+      console.error('Failed to load tasks:', err);
+    }
+  }
+
+  addTaskForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const title = taskInput.value.trim();
+    if (!title) return;
+
+    const res = await fetch('/api/tasks/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCookie('csrftoken'),
+      },
+      body: JSON.stringify({ title }),
+    });
+
+    if (res.ok) {
+      taskInput.value = '';
+      loadTasks();
+    }
+  });
+
+  async function toggleTask(id) {
+    await fetch(`/api/tasks/${id}/toggle/`, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCookie('csrftoken') },
+    });
+    loadTasks();
+  }
+
+  async function deleteTask(id) {
+    await fetch(`/api/tasks/${id}/delete/`, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': getCookie('csrftoken') },
+    });
+    loadTasks();
+  }
+
+  loadTasks();
+</script>
+{% endblock %}

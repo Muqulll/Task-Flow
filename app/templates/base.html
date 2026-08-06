@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}TaskFlow App{% endblock %}</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
+
+  <!-- Navbar -->
+  <nav class="bg-slate-800 border-b border-slate-700/80 sticky top-0 z-50">
+    <div class="max-w-5xl mx-auto px-4 py-3 flex justify-between items-center">
+      
+      <!-- Logo / Brand (Always Visible) -->
+      <a href="/" class="text-xl font-bold text-white flex items-center gap-2">
+        <span class="text-blue-500 text-2xl">✓</span> TaskFlow
+      </a>
+
+      <!-- Navigation Links -->
+      <div class="flex items-center gap-4 text-sm font-medium">
+        {% if user.is_authenticated %}
+          <span class="text-slate-400 hidden sm:inline">User: <strong class="text-slate-200">{{ user.username }}</strong></span>
+          <a href="/" class="text-slate-300 hover:text-white transition">Dashboard</a>
+          <a href="/logout/" class="px-3.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition">Logout</a>
+        
+        {# Show login/signup links ONLY if NOT on login or signup pages #}
+        {% elif request.path != '/login/' and request.path != '/signup/' %}
+          <a href="/login/" class="text-slate-300 hover:text-white transition">Log In</a>
+          <a href="/signup/" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg shadow-md shadow-blue-600/20 font-semibold transition">Sign Up</a>
+        {% endif %}
+      </div>
+
+    </div>
+  </nav>
+
+  <!-- Dynamic Content Block -->
+  <div class="flex-1 flex items-center justify-center p-4">
+    {% block content %}
+    {% endblock %}
+  </div>
+
+</body>
+</html>

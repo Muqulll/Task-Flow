@@ -1,0 +1,162 @@
+{% extends 'base.html' %}
+
+{% block title %}Sign Up - TaskFlow{% endblock %}
+
+{% block content %}
+<main class="w-full max-w-md bg-slate-800 p-8 rounded-xl shadow-2xl border border-slate-700/50">
+  
+  <!-- Header -->
+  <div class="mb-6">
+    <h2 class="text-2xl font-bold tracking-tight text-white">Create your account</h2>
+    <p class="text-slate-400 text-sm mt-1">Enter your details below to get started.</p>
+  </div>
+
+  <!-- Error Banner -->
+  <div id="error-container" class="hidden mb-4 p-3 bg-red-500/10 border border-red-500/50 text-red-400 text-sm rounded-lg"></div>
+
+  <!-- Signup Form -->
+  <form id="signup-form" class="space-y-4">
+    
+    <!-- Username -->
+    <div>
+      <label for="username" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">Username</label>
+      <input 
+        type="text" 
+        id="username" 
+        name="username" 
+        required 
+        placeholder="johndoe"
+        class="w-full px-4 py-2.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition" 
+      />
+    </div>
+
+    <!-- Email Address -->
+    <div>
+      <label for="email" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">Email Address</label>
+      <input 
+        type="email" 
+        id="email" 
+        name="email" 
+        required 
+        placeholder="john@example.com"
+        class="w-full px-4 py-2.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition" 
+      />
+    </div>
+
+    <!-- Password -->
+    <div>
+      <label for="password" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">Password</label>
+      <input 
+        type="password" 
+        id="password" 
+        name="password" 
+        required 
+        placeholder="••••••••"
+        class="w-full px-4 py-2.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition" 
+      />
+    </div>
+
+    <!-- Confirm Password -->
+    <div>
+      <label for="confirm-password" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">Confirm Password</label>
+      <input 
+        type="password" 
+        id="confirm-password" 
+        name="confirm_password" 
+        required 
+        placeholder="••••••••"
+        class="w-full px-4 py-2.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition" 
+      />
+    </div>
+
+    <!-- Submit Button -->
+    <button 
+      type="submit" 
+      id="submit-btn"
+      class="w-full mt-2 py-3 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold shadow-lg shadow-blue-600/25 active:scale-[0.98] transition duration-150"
+    >
+      Sign Up
+    </button>
+
+  </form>
+
+  <!-- Footer Redirect -->
+  <p class="text-slate-400 text-sm text-center mt-6">
+    Already have an account? <a href="/login/" class="text-blue-400 hover:underline font-medium">Log in</a>
+  </p>
+
+</main>
+
+<script>
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+
+  const signupForm = document.getElementById('signup-form');
+  const errorContainer = document.getElementById('error-container');
+  const submitBtn = document.getElementById('submit-btn');
+
+  signupForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    errorContainer.innerText = '';
+    errorContainer.classList.add('hidden');
+
+    const password = signupForm.password.value;
+    const confirmPassword = signupForm['confirm-password'].value;
+
+    if (password !== confirmPassword) {
+      errorContainer.innerText = 'Passwords do not match.';
+      errorContainer.classList.remove('hidden');
+      return;
+    }
+
+    const payload = {
+      username: signupForm.username.value,
+      email: signupForm.email.value,
+      password: password,
+    };
+
+    submitBtn.disabled = true;
+    submitBtn.innerText = 'Creating account...';
+
+    try {
+      const response = await fetch('/signup/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCookie('csrftoken'),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        errorContainer.innerText = data.error || 'Registration failed.';
+        errorContainer.classList.remove('hidden');
+      } else {
+        // Redirect to login or home after successful signup
+        window.location.href = '/login/'; 
+      }
+    } catch (err) {
+      errorContainer.innerText = 'Server error. Please try again later.';
+      errorContainer.classList.remove('hidden');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.innerText = 'Sign Up';
+    }
+  });
+</script>
+{% endblock %}

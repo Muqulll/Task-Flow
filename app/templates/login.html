@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+
+{% block title %}Log In - TaskFlow{% endblock %}
+
+{% block content %}
+<main class="w-full max-w-md bg-slate-800 p-8 rounded-xl shadow-2xl border border-slate-700/50">
+  
+  <div class="mb-6">
+    <h2 class="text-2xl font-bold tracking-tight text-white">Welcome back</h2>
+    <p class="text-slate-400 text-sm mt-1">Enter your credentials to access your account.</p>
+  </div>
+
+  <div id="error-container" class="hidden mb-4 p-3 bg-red-500/10 border border-red-500/50 text-red-400 text-sm rounded-lg"></div>
+
+  <form id="login-form" class="space-y-4">
+    <div>
+      <label for="username" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">Username</label>
+      <input type="text" id="username" name="username" required placeholder="johndoe" class="w-full px-4 py-2.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition" />
+    </div>
+
+    <div>
+      <label for="password" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">Password</label>
+      <input type="password" id="password" name="password" required placeholder="••••••••" class="w-full px-4 py-2.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition" />
+    </div>
+
+    <button type="submit" id="submit-btn" class="w-full mt-2 py-3 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold shadow-lg shadow-blue-600/25 active:scale-[0.98] transition duration-150">
+      Log In
+    </button>
+  </form>
+
+  <p class="text-slate-400 text-sm text-center mt-6">
+    Don't have an account? <a href="/signup/" class="text-blue-400 hover:underline font-medium">Sign up</a>
+  </p>
+</main>
+
+<script>
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+
+  const loginForm = document.getElementById('login-form');
+  const errorContainer = document.getElementById('error-container');
+  const submitBtn = document.getElementById('submit-btn');
+
+  loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errorContainer.innerText = '';
+    errorContainer.classList.add('hidden');
+
+    submitBtn.disabled = true;
+    submitBtn.innerText = 'Logging in...';
+
+    try {
+      const response = await fetch('/login/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCookie('csrftoken'),
+        },
+        body: JSON.stringify({
+          username: loginForm.username.value,
+          password: loginForm.password.value,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        errorContainer.innerText = data.error || 'Invalid credentials.';
+        errorContainer.classList.remove('hidden');
+      } else {
+        window.location.href = '/'; 
+      }
+    } catch (err) {
+      errorContainer.innerText = 'Server error. Please try again later.';
+      errorContainer.classList.remove('hidden');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.innerText = 'Log In';
+    }
+  });
+</script>
+{% endblock %}
