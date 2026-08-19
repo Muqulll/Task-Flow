@@ -86,35 +86,60 @@
     return li;
   }
 
+  function renderTasks(tasks) {
+    pendingList.innerHTML = '';
+    completedList.innerHTML = '';
+
+    let pending = 0;
+    let completed = 0;
+
+    tasks.forEach(task => {
+      const item = createTaskItem(task);
+      if (task.completed) {
+        completedList.appendChild(item);
+        completed++;
+      } else {
+        pendingList.appendChild(item);
+        pending++;
+      }
+    });
+
+    pendingCount.textContent = pending;
+    completedCount.textContent = completed;
+  }
+
   async function loadTasks() {
     try {
-      const res = await fetch('/api/tasks/');
-      const data = await res.json();
+      const response = await fetch('/api/tasks/');
       
-      pendingList.innerHTML = '';
-      completedList.innerHTML = '';
-
-      const pendingTasks = data.tasks.filter(t => !t.completed);
-      const completedTasks = data.tasks.filter(t => t.completed);
-
-      pendingCount.innerText = pendingTasks.length;
-      completedCount.innerText = completedTasks.length;
-
-      if (pendingTasks.length === 0) {
-        pendingList.innerHTML = `<li class="text-slate-500 text-sm italic p-3 text-center bg-slate-900/30 rounded-xl border border-dashed border-slate-800">No pending tasks. 🎉</li>`;
-      } else {
-        pendingTasks.forEach(task => pendingList.appendChild(createTaskItem(task)));
+      if (response.status === 403 || response.status === 401) {
+        console.warn('User is not authenticated.');
+        
+        document.getElementById('task-container').innerHTML = `
+          <div class="text-center py-8">
+            <h3 class="text-lg font-semibold text-slate-200 mb-2">Authentication Required</h3>
+            <p class="text-slate-400 text-sm mb-4">Please log in to view and manage your tasks.</p>
+            <a href="/login/" class="inline-block px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm rounded-xl transition shadow-lg shadow-blue-600/25">
+              Log In
+            </a>
+          </div>
+        `;
+        return;
       }
 
-      if (completedTasks.length === 0) {
-        completedList.innerHTML = `<li class="text-slate-500 text-sm italic p-3 text-center bg-slate-900/30 rounded-xl border border-dashed border-slate-800">No completed tasks yet.</li>`;
-      } else {
-        completedTasks.forEach(task => completedList.appendChild(createTaskItem(task)));
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-    } catch (err) {
-      console.error('Failed to load tasks:', err);
+
+      const tasks = await response.json();
+      renderTasks(tasks);
+
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
     }
   }
+
+  document.addEventListener('DOMContentLoaded', loadTasks);
 
   addTaskForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -151,7 +176,5 @@
     });
     loadTasks();
   }
-
-  loadTasks();
 </script>
 {% endblock %}

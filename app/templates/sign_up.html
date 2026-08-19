@@ -126,13 +126,14 @@
       username: signupForm.username.value,
       email: signupForm.email.value,
       password: password,
+      confirm_password: confirmPassword
     };
 
     submitBtn.disabled = true;
     submitBtn.innerText = 'Creating account...';
 
     try {
-      const response = await fetch('/signup/', {
+      const response = await fetch('/api/signup/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -144,10 +145,21 @@
       const data = await response.json();
 
       if (!response.ok) {
-        errorContainer.innerText = data.error || 'Registration failed.';
+        // Parse Django Rest Framework object/array validation errors dynamically
+        let errorMessage = 'Registration failed.';
+        if (typeof data === 'object') {
+          const firstKey = Object.keys(data)[0];
+          if (firstKey) {
+            const errVal = data[firstKey];
+            errorMessage = Array.isArray(errVal) ? `${firstKey}: ${errVal[0]}` : `${firstKey}: ${errVal}`;
+          }
+        } else if (data.error) {
+          errorMessage = data.error;
+        }
+
+        errorContainer.innerText = errorMessage;
         errorContainer.classList.remove('hidden');
       } else {
-        // Redirect to login or home after successful signup
         window.location.href = '/login/'; 
       }
     } catch (err) {
