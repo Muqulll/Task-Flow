@@ -15,3 +15,8 @@ db.sqlite3
 # IDE / Editor settings
 .vscode/
 .idea/
+
+# PyInstaller & Build artifacts
+build/
+dist/
+*.spec

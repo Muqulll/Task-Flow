@@ -1,142 +1,221 @@
-import json
 from django.shortcuts import render, redirect
+from django.contrib.auth import authenticate, login, logout 
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
+from django.contrib.auth.forms import SetPasswordForm
 from django.contrib.auth.models import User
-from django.http import JsonResponse
-from django.contrib.auth import authenticate, login
-from django.contrib.auth.decorators import login_required
-from django.views.decorators.http import require_POST
-from django.contrib.auth import logout
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes, force_str
+from django.template.loader import render_to_string
+from django.core.mail import EmailMultiAlternatives
+
 from .models import Task
+from .serializers import TaskSerializer, RegisterSerializer
 
-def signup_view(request):
-    # 1. Render the HTML page when user opens the link in browser
-    if request.method == 'GET':
-        return render(request, 'sign_up.html')
 
-    # 2. Process sign-up when JavaScript submits data
-    elif request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            
-            username = data.get('username', '').strip()
-            email = data.get('email', '').strip()
-            password = data.get('password', '')
-            confirm_password = data.get('confirm_password', '')
+def logout_view(request):
+    """Clears the session cookie and redirects to login"""
+    logout(request)
+    return redirect('/login/')
 
-            # Validation checks
-            if not all([username, email, password, confirm_password]):
-                return JsonResponse({'error': 'All fields are required.'}, status=400)
 
-            if password != confirm_password:
-                return JsonResponse({'error': 'Passwords do not match.'}, status=400)
+# ==========================================
+# 1. HTML TEMPLATE VIEWS (For rendering UI)
+# ==========================================
 
-            if len(password) < 8:
-                return JsonResponse({'error': 'Password must be at least 8 characters long.'}, status=400)
+def login_page_view(request):
+    if request.user.is_authenticated:
+        return redirect('/')
+    return render(request, 'login.html')
 
-            if User.objects.filter(username=username).exists():
-                return JsonResponse({'error': 'Username is already taken.'}, status=400)
+def signup_page_view(request):
+    if request.user.is_authenticated:
+        return redirect('/')
+    return render(request, 'sign_up.html')
 
-            if User.objects.filter(email=email).exists():
-                return JsonResponse({'error': 'Email is already registered.'}, status=400)
-
-            # Create User
-            user = User.objects.create_user(
-                username=username,
-                email=email,
-                password=password
-            )
-
-            return JsonResponse({'message': 'Account created successfully!'}, status=201)
-
-        except json.JSONDecodeError:
-            return JsonResponse({'error': 'Invalid JSON format.'}, status=400)
-        except Exception as e:
-            return JsonResponse({'error': 'An unexpected error occurred.'}, status=500)
-
-def login_view(request):
-    if request.method == 'GET':
-        return render(request, 'login.html')
-
-    elif request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            username = data.get('username', '').strip()
-            password = data.get('password', '')
-
-            if not username or not password:
-                return JsonResponse({'error': 'Username and password are required.'}, status=400)
-
-            # Authenticate verifies the hashed password against the DB
-            user = authenticate(request, username=username, password=password)
-
-            if user is not None:
-                # login creates the session cookie in the user's browser
-                login(request, user)
-                return JsonResponse({'message': 'Login successful!'}, status=200)
-            else:
-                return JsonResponse({'error': 'Invalid username or password.'}, status=400)
-
-        except json.JSONDecodeError:
-            return JsonResponse({'error': 'Invalid JSON format.'}, status=400)
-        except Exception as e:
-            return JsonResponse({'error': 'An unexpected error occurred.'}, status=500)
-
-@login_required(login_url='/login/')
 def todo_page_view(request):
     return render(request, 'Todo_Page.html')
 
+def forgot_password_page_view(request):
+    """Renders the HTML page for entering the email address"""
+    if request.user.is_authenticated:
+        return redirect('/')
+    return render(request, 'app/password_reset.html')
 
-# --- API ENDPOINTS ---
-@login_required(login_url='/login/')
+def password_reset_confirm_page_view(request, uidb64, token):
+    """Renders the HTML page for entering a new password"""
+    if request.user.is_authenticated:
+        return redirect('/')
+    return render(request, 'app/password_reset_confirm.html', {'uidb64': uidb64, 'token': token})
+
+def password_reset_done_page_view(request):
+    """Renders the confirmation page after an email reset has been requested"""
+    if request.user.is_authenticated:
+        return redirect('/')
+    return render(request, 'app/password_reset_done.html')
+
+
+# ==========================================
+# 2. DRF API ENDPOINTS (Uses Session Auth)
+# ==========================================
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def signup_api(request):
+    """Handles registration via JS fetch()"""
+    serializer = RegisterSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response({"message": "Account created successfully!"}, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny]) 
+def login_api(request):
+    """Handles login via JS fetch() and sets the session cookie"""
+    username = request.data.get('username')
+    password = request.data.get('password')
+
+    if not username or not password:
+        return Response({'error': 'Username and password are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    user = authenticate(request, username=username, password=password)
+
+    if user is not None:
+        login(request, user)
+        return Response({'message': 'Login successful!'}, status=status.HTTP_200_OK)
+    else:
+        return Response({'error': 'Invalid username or password.'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
 def task_list_api(request):
-    """GET: Fetch all tasks | POST: Create a task"""
+    """GET: Fetch user tasks | POST: Create task"""
     if request.method == 'GET':
         tasks = Task.objects.filter(user=request.user)
-        task_data = [
-            {'id': t.id, 'title': t.title, 'completed': t.completed} 
-            for t in tasks
-        ]
-        return JsonResponse({'tasks': task_data})
+        serializer = TaskSerializer(tasks, many=True)
+        return Response({'tasks': serializer.data}, status=status.HTTP_200_OK)
 
     elif request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            title = data.get('title', '').strip()
-            if not title:
-                return JsonResponse({'error': 'Task title cannot be empty.'}, status=400)
-
-            task = Task.objects.create(user=request.user, title=title)
-            return JsonResponse({'id': task.id, 'title': task.title, 'completed': task.completed}, status=201)
-        except json.JSONDecodeError:
-            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        serializer = TaskSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(user=request.user)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@login_required(login_url='/login/')
-@require_POST
+@api_view(['POST', 'PATCH'])
+@permission_classes([IsAuthenticated])
 def toggle_task_api(request, task_id):
     """Toggle completion status"""
     try:
         task = Task.objects.get(id=task_id, user=request.user)
-        task.completed = not task.completed
-        task.save()
-        return JsonResponse({'id': task.id, 'completed': task.completed})
     except Task.DoesNotExist:
-        return JsonResponse({'error': 'Task not found'}, status=404)
+        return Response({'error': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    task.completed = not task.completed
+    task.save()
+    serializer = TaskSerializer(task)
+    return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-@login_required(login_url='/login/')
-@require_POST
+@api_view(['POST', 'DELETE'])
+@permission_classes([IsAuthenticated])
 def delete_task_api(request, task_id):
     """Delete a task"""
     try:
         task = Task.objects.get(id=task_id, user=request.user)
-        task.delete()
-        return JsonResponse({'message': 'Task deleted'})
     except Task.DoesNotExist:
-        return JsonResponse({'error': 'Task not found'}, status=404)
+        return Response({'error': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    task.delete()
+    return Response({'message': 'Task deleted successfully'}, status=status.HTTP_200_OK)
 
 
-def logout_view(request):
-    """Logout user"""
-    logout(request)
-    return redirect('/login/')
+# ==========================================
+# 3. PASSWORD RESET API ENDPOINTS
+# ==========================================
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def password_reset_request_api(request):
+    """Handles password reset request via JS fetch() and sends fully customized email"""
+    email = request.data.get('email')
+    if not email:
+        return Response({'error': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user = User.objects.get(email=email)
+        
+        token = default_token_generator.make_token(user)
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        
+        protocol = 'https' if request.is_secure() else 'http'
+        domain = request.get_host() or '127.0.0.1:8000'
+        
+        context = {
+            'user': user,
+            'protocol': protocol,
+            'domain': domain,
+            'uid': uid,
+            'token': token,
+        }
+        
+        # Point directly to your unique template path to prevent Django default template collision
+        html_content = render_to_string('registration/email_password_reset.html', context)
+        
+        text_content = (
+            f"Hello {user.username},\n\n"
+            f"We received a request to reset your password for your Task-Flow account.\n"
+            f"Please go to the following page to choose a new password:\n\n"
+            f"{protocol}://{domain}/reset/{uid}/{token}/\n\n"
+            f"If you didn't request this, you can safely ignore this email.\n\n"
+            f"The Task-Flow Team"
+        )
+        
+        subject = "Reset Your Task-Flow Password"
+        email_msg = EmailMultiAlternatives(subject, text_content, None, [user.email])
+        email_msg.attach_alternative(html_content, "text/html")
+        email_msg.send()
+
+    except User.DoesNotExist:
+        pass
+
+    return Response(
+        {'message': 'If an account with this email exists, a password reset link has been sent.'}, 
+        status=status.HTTP_200_OK
+    )
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def password_reset_confirm_api(request, uidb64, token):
+    """Handles updating the password using the token sent in the reset link"""
+    try:
+        uid = force_str(urlsafe_base64_decode(uidb64))
+        user = User.objects.get(pk=uid)
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        user = None
+
+    if user is not None and default_token_generator.check_token(user, token):
+        new_password = request.data.get('new_password')
+        confirm_password = request.data.get('confirm_password')
+
+        if not new_password or not confirm_password:
+            return Response({'error': 'Both password fields are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if new_password != confirm_password:
+            return Response({'error': 'Passwords do not match.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        form = SetPasswordForm(user, {'new_password1': new_password, 'new_password2': confirm_password})
+        if form.is_valid():
+            form.save()
+            return Response({'message': 'Password has been reset successfully! You can now log in.'}, status=status.HTTP_200_OK)
+        else:
+            return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
+    else:
+        return Response({'error': 'The reset link is invalid or has expired.'}, status=status.HTTP_400_BAD_REQUEST)
